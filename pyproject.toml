@@ -1,0 +1,14 @@
+[project]
+name = "nlp-language-models-lab"
+version = "0.1.0"
+description = "Strojenie HerBERT i polish-gpt2 (PEFT) na PolEmo2: klasyfikacja tekstu i tokenów"
+requires-python = ">=3.11"
+dependencies = [
+    "datasets>=4.0",
+    "transformers>=4.45",
+    "numpy>=2.0",
+]
+
+# kod uruchamiany z katalogu repo jako pakiet src (python -m src.data.prepare), bez instalacji
+[tool.uv]
+package = false
