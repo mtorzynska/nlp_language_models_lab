@@ -5,8 +5,14 @@ description = "Strojenie HerBERT i polish-gpt2 (PEFT) na PolEmo2: klasyfikacja t
 requires-python = ">=3.11"
 dependencies = [
     "datasets>=4.0",
-    "transformers>=4.45",
+    "transformers>=5.0",
     "numpy>=2.0",
+    "scikit-learn>=1.9.1",
+    "plotly>=7.1.0",
+    "umap-learn>=0.5.12",
+    "torch",
+    "peft",
+    "accelerate",
 ]
 
 # kod uruchamiany z katalogu repo jako pakiet src (python -m src.data.prepare), bez instalacji
