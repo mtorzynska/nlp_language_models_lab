@@ -86,6 +86,7 @@ class HerbertForSequenceClassification:
                 modules_to_save=["classifier"],
             )
             self._model = get_peft_model(self._model, lora_config)
+            self._model.print_trainable_parameters()
         else:
             # Freeze all layers except the classifier.
             for param in self._model.bert.parameters():
@@ -95,7 +96,9 @@ class HerbertForSequenceClassification:
             for param in self._model.classifier.parameters():
                 param.requires_grad = True
 
-        self._model.print_trainable_parameters()
+            logger.info(
+                f"Trainable parameters: {sum(p.numel() for p in self._model.parameters() if p.requires_grad)}"
+            )
 
         tokenised_dataset = dataset.map(
             encode_text_classification,
