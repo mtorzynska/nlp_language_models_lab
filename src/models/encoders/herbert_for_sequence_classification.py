@@ -56,7 +56,14 @@ class HerbertForSequenceClassification:
 
         logger.debug(self._model.config)
 
-    def fine_tune(self, dataset: DatasetDict | None = None) -> None:
+    def fine_tune(
+        self,
+        dataset: DatasetDict | None = None,
+        *,
+        epochs: int = 3,
+        batch_size: int = 16,
+        learning_rate: float = 5e-5,
+    ) -> None:
         if dataset is None:
             dataset = load_processed("text")
 
@@ -84,10 +91,10 @@ class HerbertForSequenceClassification:
             output_dir=str(self.CHECKPOINTS_DIR),  # training checkpoints
             eval_strategy="epoch",  # Evaluate at the end of each epoch.
             save_strategy="epoch",  # Must match eval strategy when load_best_model_at_end=True.
-            learning_rate=5e-5,  # Start with a small learning rate
-            per_device_train_batch_size=16,  # Batch size per GPU
-            per_device_eval_batch_size=16,
-            num_train_epochs=3,  # Number of epochs
+            learning_rate=learning_rate,  # Start with a small learning rate
+            per_device_train_batch_size=batch_size,  # Batch size per GPU
+            per_device_eval_batch_size=batch_size,
+            num_train_epochs=epochs,  # Number of epochs
             weight_decay=0.01,  # Regularization
             save_total_limit=2,  # Limit checkpoints to save space
             load_best_model_at_end=True,  # Automatically load the best checkpoint
@@ -153,7 +160,9 @@ class HerbertForSequenceClassification:
         metric = load("f1")
         return {
             "f1_score": float(
-                metric.compute(predictions=predicted_labels, references=references)["f1"]
+                metric.compute(
+                    predictions=predicted_labels, references=references, average="macro"
+                )["f1"]
             ),
             "accuracy": float((predicted_labels == references).mean()),
         }
@@ -172,11 +181,18 @@ class HerbertForSequenceClassification:
         return self._model(**inputs)
 
     def save(self, path: Path | None = None) -> None:
-        MODELS_DIR.parent.mkdir(exist_ok=True, parents=True)
-        self._model.save(path or self.MODEL_PATH)
+        save_path = path or self.MODEL_PATH
+        save_path.mkdir(exist_ok=True, parents=True)
+        self._model.save_pretrained(save_path)
+        self._tokeniser.save_pretrained(save_path)
 
 
-bert = HerbertForSequenceClassification()
-bert.fine_tune()
-bert.evaluate()
-bert.save()
+def main() -> None:
+    bert = HerbertForSequenceClassification()
+    bert.fine_tune()
+    bert.evaluate()
+    bert.save()
+
+
+if __name__ == "__main__":
+    main()

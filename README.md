@@ -40,6 +40,15 @@ Szczegóły:
 
 ## Użycie w treningu
 
+```bash
+# fine-tuning z CLI (pełny zbiór lub próbka, zadanie tekst/token)
+uv run python -m src.models.train --task text                # klasyfikacja recenzji
+uv run python -m src.models.train --task token               # klasyfikacja tokenów
+uv run python -m src.models.train --task text --max-train 1000 --epochs 1  # szybki test
+
+# Notebook do uruchomienia w Google Colab (T4 GPU): notebooks/colab_training.ipynb
+```
+
 ```python
 from src.data import load_processed, load_tokenizer, encode_token_classification, get_collator
 from src.data.tokenization import model_kwargs
