@@ -36,6 +36,11 @@ def main() -> None:
         default="lora",
         help="lora: adaptery PEFT (domyślnie), head: tylko głowa klasyfikacyjna",
     )
+    parser.add_argument(
+        "--run-name",
+        default=None,
+        help="nazwa przebiegu (domyślnie: tryb, np. lora). Wyniki trafiają do data/<task>/<run-name>/",
+    )
     parser.add_argument("--out-dir", type=Path, default=PROCESSED_DIR)
     parser.add_argument(
         "--max-train",
@@ -53,7 +58,9 @@ def main() -> None:
         dataset = subsample_train(dataset, args.max_train)
         logger.info(f"Train subsampled to {len(dataset['train'])} examples")
 
-    encoder = ENCODERS[args.task]()
+    run_name = args.run_name or args.mode
+    encoder = ENCODERS[args.task](run_name=run_name)
+    logger.info(f"Run: {run_name} — results in data/{args.task}/{run_name}/")
     encoder.fine_tune(
         dataset,
         epochs=args.epochs,

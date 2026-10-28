@@ -29,9 +29,9 @@ from src.logger import logger
 
 
 class HerbertForTokenClassification:
-    CHECKPOINTS_DIR: Path = DATA_DIR / "HerbertForTokenClassification" / "results"
-
-    def __init__(self) -> None:
+    def __init__(self, run_name: str = "default") -> None:
+        self.run_name = run_name
+        self._results_dir = DATA_DIR / "HerbertForTokenClassification" / run_name
         self._tokeniser = load_tokenizer(BERT_MODEL)
         self._model = AutoModelForTokenClassification.from_pretrained(
             BERT_MODEL, **model_kwargs(self._tokeniser)
@@ -78,7 +78,7 @@ class HerbertForTokenClassification:
 
         # Define training arguments
         training_args = TrainingArguments(
-            output_dir=str(self.CHECKPOINTS_DIR),  # training checkpoints
+            output_dir=str(self._results_dir / "results"),  # training checkpoints
             eval_strategy="epoch",  # Evaluate at the end of each epoch.
             save_strategy="epoch",  # Must match eval strategy when load_best_model_at_end=True.
             learning_rate=learning_rate,  # Start with a small learning rate
@@ -152,7 +152,7 @@ class HerbertForTokenClassification:
             confusion_matrix=cm, display_labels=list(ID2LABEL.values())
         )
         disp.plot()
-        results_dir = self.CHECKPOINTS_DIR.parent
+        results_dir = self._results_dir
         results_dir.mkdir(exist_ok=True, parents=True)
         plt.savefig(results_dir / "confusion_matrix.png", bbox_inches="tight")
         plt.close()
@@ -173,13 +173,13 @@ class HerbertForTokenClassification:
         return metrics
 
     def save(self, path: Path | None = None) -> None:
-        save_path = path or MODELS_DIR / "HerbertForTokenClassification"
+        save_path = path or MODELS_DIR / "HerbertForTokenClassification" / self.run_name
         save_path.mkdir(exist_ok=True, parents=True)
         self._model.save_pretrained(save_path)
         self._tokeniser.save_pretrained(save_path)
         # Keep metrics next to the model for provenance.
         for name in ("metrics.json", "confusion_matrix.png"):
-            results_file = self.CHECKPOINTS_DIR.parent / name
+            results_file = self._results_dir / name
             if results_file.exists():
                 (save_path / name).write_bytes(results_file.read_bytes())
 

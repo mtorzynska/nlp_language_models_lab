@@ -39,10 +39,9 @@ from src.logger import logger
 
 
 class HerbertForSequenceClassification:
-    MODEL_PATH: Path = MODELS_DIR / "HerbertForSequenceClassification"
-    CHECKPOINTS_DIR: Path = DATA_DIR / "HerbertForSequenceClassification" / "results"
-
-    def __init__(self) -> None:
+    def __init__(self, run_name: str = "default") -> None:
+        self.run_name = run_name
+        self._results_dir = DATA_DIR / "HerbertForSequenceClassification" / run_name
         self._tokeniser = AutoTokenizer.from_pretrained(BERT_MODEL)
         label_count = len(LABEL_NAMES)
         self._model = BertForSequenceClassification.from_pretrained(
@@ -105,25 +104,13 @@ class HerbertForSequenceClassification:
             remove_columns=["id", "text"],
         )
 
-        # Freeze all layers except the classifier.
-        for param in self._model.bert.parameters():
-            param.requires_grad = False
-
-        # Keep only the classification head trainable.
-        for param in self._model.classifier.parameters():
-            param.requires_grad = True
-
-        logger.debug(
-            f"Trainable parameters: {sum(p.numel() for p in self._model.parameters() if p.requires_grad)}"
-        )
-
         logger.debug(
             f"Trainable parameters: {sum(p.numel() for p in self._model.parameters() if p.requires_grad)}"
         )
 
         # Define training arguments
         training_args = TrainingArguments(
-            output_dir=str(self.CHECKPOINTS_DIR),  # training checkpoints
+            output_dir=str(self._results_dir / "results"),  # training checkpoints
             eval_strategy="epoch",  # Evaluate at the end of each epoch.
             save_strategy="epoch",  # Must match eval strategy when load_best_model_at_end=True.
             learning_rate=learning_rate,  # Start with a small learning rate
@@ -190,7 +177,7 @@ class HerbertForSequenceClassification:
             confusion_matrix=cm, display_labels=list(LABEL_NAMES)
         )
         disp.plot()
-        results_dir = self.CHECKPOINTS_DIR.parent
+        results_dir = self._results_dir
         results_dir.mkdir(exist_ok=True, parents=True)
         plt.savefig(results_dir / "confusion_matrix.png", bbox_inches="tight")
         plt.close()
@@ -222,13 +209,13 @@ class HerbertForSequenceClassification:
         return self._model(**inputs)
 
     def save(self, path: Path | None = None) -> None:
-        save_path = path or self.MODEL_PATH
+        save_path = path or MODELS_DIR / "HerbertForSequenceClassification" / self.run_name
         save_path.mkdir(exist_ok=True, parents=True)
         self._model.save_pretrained(save_path)
         self._tokeniser.save_pretrained(save_path)
         # Keep metrics next to the model for provenance.
         for name in ("metrics.json", "confusion_matrix.png"):
-            results_file = self.CHECKPOINTS_DIR.parent / name
+            results_file = self._results_dir / name
             if results_file.exists():
                 (save_path / name).write_bytes(results_file.read_bytes())
 
