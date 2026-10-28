@@ -30,6 +30,12 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--task", choices=sorted(ENCODERS), default="text")
+    parser.add_argument(
+        "--mode",
+        choices=["lora", "head"],
+        default="lora",
+        help="lora: adaptery PEFT (domyślnie), head: tylko głowa klasyfikacyjna",
+    )
     parser.add_argument("--out-dir", type=Path, default=PROCESSED_DIR)
     parser.add_argument(
         "--max-train",
@@ -53,6 +59,7 @@ def main() -> None:
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
+        lora=args.mode == "lora",
     )
     metrics = encoder.evaluate(dataset)
     logger.info(f"Test metrics: {metrics}")

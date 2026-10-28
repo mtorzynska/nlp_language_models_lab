@@ -12,6 +12,7 @@ dependencies = [
     "peft>=0.21.2",
     "evaluate>=0.4.6",
     "scikit-learn>=1.9.1",
+    "matplotlib>=3.11.2",
 ]
 
 # kod uruchamiany z katalogu repo jako pakiet src (python -m src.data.prepare), bez instalacji

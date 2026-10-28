@@ -1,11 +1,17 @@
 """HerBERT for sequence-level classification with PEFT-based fine tuning."""
 
+import json
 from pathlib import Path
 from typing import Any
 
+import matplotlib
+
+matplotlib.use("Agg")  # headless save, no display needed
+import matplotlib.pyplot as plt
 import torch
 from datasets import DatasetDict
 from evaluate import load
+from peft import LoraConfig, TaskType, get_peft_model
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     classification_report,
@@ -63,9 +69,34 @@ class HerbertForSequenceClassification:
         epochs: int = 3,
         batch_size: int = 16,
         learning_rate: float = 5e-5,
+        lora: bool = True,
+        lora_r: int = 8,
+        lora_alpha: int = 16,
     ) -> None:
         if dataset is None:
             dataset = load_processed("text")
+
+        if lora:
+            # PEFT: adapt attention weights with LoRA, keep the classifier trainable.
+            lora_config = LoraConfig(
+                task_type=TaskType.SEQ_CLS,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=0.1,
+                target_modules=["query", "value"],
+                modules_to_save=["classifier"],
+            )
+            self._model = get_peft_model(self._model, lora_config)
+        else:
+            # Freeze all layers except the classifier.
+            for param in self._model.bert.parameters():
+                param.requires_grad = False
+
+            # Keep only the classification head trainable.
+            for param in self._model.classifier.parameters():
+                param.requires_grad = True
+
+        self._model.print_trainable_parameters()
 
         tokenised_dataset = dataset.map(
             encode_text_classification,
@@ -81,6 +112,10 @@ class HerbertForSequenceClassification:
         # Keep only the classification head trainable.
         for param in self._model.classifier.parameters():
             param.requires_grad = True
+
+        logger.debug(
+            f"Trainable parameters: {sum(p.numel() for p in self._model.parameters() if p.requires_grad)}"
+        )
 
         logger.debug(
             f"Trainable parameters: {sum(p.numel() for p in self._model.parameters() if p.requires_grad)}"
@@ -155,10 +190,14 @@ class HerbertForSequenceClassification:
             confusion_matrix=cm, display_labels=list(LABEL_NAMES)
         )
         disp.plot()
+        results_dir = self.CHECKPOINTS_DIR.parent
+        results_dir.mkdir(exist_ok=True, parents=True)
+        plt.savefig(results_dir / "confusion_matrix.png", bbox_inches="tight")
+        plt.close()
 
         # Calculate metrics.
         metric = load("f1")
-        return {
+        metrics = {
             "f1_score": float(
                 metric.compute(
                     predictions=predicted_labels, references=references, average="macro"
@@ -166,6 +205,8 @@ class HerbertForSequenceClassification:
             ),
             "accuracy": float((predicted_labels == references).mean()),
         }
+        (results_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+        return metrics
 
     def __call__(self, sentences: list[tuple[str, str]], *args, **kwargs) -> Any:
 
@@ -185,6 +226,11 @@ class HerbertForSequenceClassification:
         save_path.mkdir(exist_ok=True, parents=True)
         self._model.save_pretrained(save_path)
         self._tokeniser.save_pretrained(save_path)
+        # Keep metrics next to the model for provenance.
+        for name in ("metrics.json", "confusion_matrix.png"):
+            results_file = self.CHECKPOINTS_DIR.parent / name
+            if results_file.exists():
+                (save_path / name).write_bytes(results_file.read_bytes())
 
 
 def main() -> None:
