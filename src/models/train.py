@@ -60,7 +60,7 @@ def main() -> None:
 
     run_name = args.run_name or args.mode
     encoder = ENCODERS[args.task](run_name=run_name)
-    logger.info(f"Run: {run_name} — results in data/{args.task}/{run_name}/")
+    logger.info(f"Run: {run_name} — results in {encoder._results_dir}")
     encoder.fine_tune(
         dataset,
         epochs=args.epochs,
