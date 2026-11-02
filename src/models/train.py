@@ -44,7 +44,11 @@ def _ensure_augmentation_exists(
     aug_task_dir: Path,
     processed_dir: Path = PROCESSED_DIR,
 ) -> None:
-    """Jeśli pliki augmentacji nie istnieją, generuje je automatycznie (deterministycznie)."""
+    """Jeśli pliki augmentacji nie istnieją, generuje je automatycznie (deterministycznie).
+
+    Dla zadania 'text' używa kolumny 'text' + 'label'.
+    Dla zadania 'token' używa kolumny 'words' + 'labels' (słowa + etykiety per słowo).
+    """
     combined = aug_task_dir / "augmented_combined_train.json"
     train_files = sorted(aug_task_dir.glob("augmented_mask_*_train.json"))
 
@@ -59,8 +63,22 @@ def _ensure_augmentation_exists(
     # Załaduj oryginalne dane treningowe
     processed = load_processed(task, data_dir=processed_dir)
     train_ds = processed["train"]
-    texts = train_ds["text"]
-    labels = train_ds["label"]
+
+    # Sprawdź jakie kolumny są dostępne
+    column_names = train_ds.column_names
+    if "text" in column_names:
+        texts = train_ds["text"]
+        labels = train_ds["label"]
+        text_key = "text"
+    elif "words" in column_names:
+        texts = [" ".join(words) for words in train_ds["words"]]
+        labels = train_ds["labels"]
+        text_key = "words"
+    else:
+        raise ValueError(
+            f"Nieznane kolumny w zbiorze {task}: {column_names}. "
+            f"Oczekiwano 'text' lub 'words'."
+        )
 
     all_augmented: list[dict] = []
     for mask_ratio in MASK_RATIOS:
@@ -100,6 +118,18 @@ def load_augmented_dataset(
     """
     aug_task_dir = aug_dir / task
     _ensure_augmentation_exists(task, aug_task_dir, processed_dir=processed_dir)
+
+    # Augmentacja produkuje dane na poziomie zdania (text + single label),
+    # więc nadaje się tylko do klasyfikacji tekstu. Dla klasyfikacji tokenów
+    # potrzebne byłyby słowa + etykiety per słowo, co nie jest wspierane przez
+    # augmentację [MASK]/fill-mask (zmienia granice słów).
+    if task == "token":
+        raise ValueError(
+            "Augmentacja [MASK]/fill-mask produkuje dane na poziomie zdania "
+            "(text + pojedyncza etykieta), więc nie nadaje się do klasyfikacji "
+            "tokenów (wymaga words + etykiety per słowo). "
+            "Pomiń trening tokenów na augmentowanych danych."
+        )
 
     # Szukaj pliku combined lub pierwszego dostępnego pliku augmentacji train
     combined = aug_task_dir / "augmented_combined_train.json"
