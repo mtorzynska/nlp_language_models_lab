@@ -13,6 +13,8 @@ dependencies = [
     "evaluate>=0.4.6",
     "scikit-learn>=1.9.1",
     "matplotlib>=3.11.2",
+    "plotly>=5.22.0",
+    "umap-learn>=0.5.6",
 ]
 
 # kod uruchamiany z katalogu repo jako pakiet src (python -m src.data.prepare), bez instalacji
