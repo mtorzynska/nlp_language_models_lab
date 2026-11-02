@@ -15,6 +15,7 @@ from pathlib import Path
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel
 from src.config import DATA_DIR, PROCESSED_DIR, LABEL_NAMES
 from src.data import load_processed
+from src.data.augmentation import MASK_RATIOS, augment_with_mask
 from src.data.prepare import subsample_train
 from src.logger import logger
 from src.models.encoders.herbert_for_sequence_classification import (
@@ -38,6 +39,53 @@ ENCODERS = {
 }
 
 
+def _ensure_augmentation_exists(
+    task: str,
+    aug_task_dir: Path,
+    processed_dir: Path = PROCESSED_DIR,
+) -> None:
+    """Jeśli pliki augmentacji nie istnieją, generuje je automatycznie (deterministycznie)."""
+    combined = aug_task_dir / "augmented_combined_train.json"
+    train_files = sorted(aug_task_dir.glob("augmented_mask_*_train.json"))
+
+    if combined.exists() or train_files:
+        return
+
+    logger.info(
+        f"Brak plików augmentacji w {aug_task_dir} — generuję automatycznie..."
+    )
+    aug_task_dir.mkdir(parents=True, exist_ok=True)
+
+    # Załaduj oryginalne dane treningowe
+    processed = load_processed(task, data_dir=processed_dir)
+    train_ds = processed["train"]
+    texts = train_ds["text"]
+    labels = train_ds["label"]
+
+    all_augmented: list[dict] = []
+    for mask_ratio in MASK_RATIOS:
+        logger.info(
+            f"Generowanie augmentacji mask_ratio={mask_ratio} dla zadania {task}..."
+        )
+        variant = augment_with_mask(
+            texts,
+            labels,
+            mask_ratio=mask_ratio,
+            max_samples=None,
+            seed=42,
+        )
+        variant_file = aug_task_dir / f"augmented_mask_{int(mask_ratio * 100)}pct_train.json"
+        with variant_file.open("w", encoding="utf-8") as f:
+            json.dump(variant, f, ensure_ascii=False, indent=2)
+        logger.info(f"Zapisano {len(variant)} przykładów do {variant_file}")
+        all_augmented.extend(variant)
+
+    combined_file = aug_task_dir / "augmented_combined_train.json"
+    with combined_file.open("w", encoding="utf-8") as f:
+        json.dump(all_augmented, f, ensure_ascii=False, indent=2)
+    logger.info(f"Zapisano łącznie {len(all_augmented)} przykładów do {combined_file}")
+
+
 def load_augmented_dataset(
     task: str,
     aug_dir: Path = DATA_DIR / "augmented",
@@ -47,11 +95,11 @@ def load_augmented_dataset(
     a walidację i test z oryginalnie przetworzonych danych.
 
     Augmentacja zawiera tylko split train; walidacja i test
-    pochodzą z data/processed/.
+    pochodzą z data/processed/. Jeśli pliki augmentacji nie istnieją,
+    są generowane automatycznie (deterministycznie).
     """
     aug_task_dir = aug_dir / task
-    if not aug_task_dir.exists():
-        raise FileNotFoundError(f"Katalog augmentacji nie istnieje: {aug_task_dir}")
+    _ensure_augmentation_exists(task, aug_task_dir, processed_dir=processed_dir)
 
     # Szukaj pliku combined lub pierwszego dostępnego pliku augmentacji train
     combined = aug_task_dir / "augmented_combined_train.json"
