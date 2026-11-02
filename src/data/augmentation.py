@@ -24,6 +24,20 @@ from src.data.prepare import load_processed
 from src.logger import logger
 
 MASK_RATIOS = [0.10, 0.20]  # dwa warianty augmentacji -> 2 pliki wyjściowe
+MAX_TOKENS = 512  # limit HerBERTa (wliczając [CLS] i [SEP])
+
+
+def _truncate_to_max_tokens(text: str, tokenizer: AutoTokenizer, max_tokens: int = MAX_TOKENS) -> str:
+    """Obcina tekst tak, aby po tokenizacji nie przekroczył max_tokens (wliczając [CLS]/[SEP]).
+
+    Używa faktycznej liczby subtokenów (nie słów), ponieważ jedno słowo może dać wiele subtokenów.
+    """
+    encoded = tokenizer(text, truncation=False, add_special_tokens=True)
+    if len(encoded["input_ids"]) <= max_tokens:
+        return text
+    # Obcinamy do max_tokens - 1 (zostawiamy miejsce na [SEP] jeśli nie jest obecny)
+    truncated_ids = encoded["input_ids"][: max_tokens - 1]
+    return tokenizer.decode(truncated_ids, skip_special_tokens=True)
 
 
 def augment_with_mask(
@@ -63,6 +77,10 @@ def augment_with_mask(
     for idx in indices:
         text = texts[idx]
         label = labels[idx]
+
+        # Obetnij tekst do limitu HerBERTa (512 tokenów z [CLS]/[SEP])
+        text = _truncate_to_max_tokens(text, tokenizer)
+
         words = text.split()
         n_mask = max(1, int(len(words) * mask_ratio))
         mask_positions = random.sample(range(len(words)), min(n_mask, len(words)))
@@ -87,6 +105,8 @@ def augment_with_mask(
             if isinstance(result, list) and len(result) > 0:
                 result = result[0]
             augmented_text = result["sequence"]
+            # Obetnij wynik, jeśli fill-mask wydłużył tekst ponad limit
+            augmented_text = _truncate_to_max_tokens(augmented_text, tokenizer)
             remaining_mask = mask_token in augmented_text
 
         # Usuń ewentualne spacje przed znakami interpunkcyjnymi wprowadzone przez tokenizer
