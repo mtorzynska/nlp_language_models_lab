@@ -30,14 +30,15 @@ MAX_TOKENS = 512  # limit HerBERTa (wliczając [CLS] i [SEP])
 def _truncate_to_max_tokens(text: str, tokenizer: AutoTokenizer, max_tokens: int = MAX_TOKENS) -> str:
     """Obcina tekst tak, aby po tokenizacji nie przekroczył max_tokens (wliczając [CLS]/[SEP]).
 
-    Używa faktycznej liczby subtokenów (nie słów), ponieważ jedno słowo może dać wiele subtokenów.
+    Używa wbudowanego truncation tokenaizer'a, który uwzględnia tokeny specjalne.
     """
-    encoded = tokenizer(text, truncation=False, add_special_tokens=True)
-    if len(encoded["input_ids"]) <= max_tokens:
-        return text
-    # Obcinamy do max_tokens - 1 (zostawiamy miejsce na [SEP] jeśli nie jest obecny)
-    truncated_ids = encoded["input_ids"][: max_tokens - 1]
-    return tokenizer.decode(truncated_ids, skip_special_tokens=True)
+    encoded = tokenizer(
+        text,
+        truncation=True,
+        max_length=max_tokens,
+        add_special_tokens=True,
+    )
+    return tokenizer.decode(encoded["input_ids"], skip_special_tokens=True)
 
 
 def augment_with_mask(
