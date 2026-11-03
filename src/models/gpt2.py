@@ -5,6 +5,7 @@ from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
     GPT2ForSequenceClassification,
     GPT2ForTokenClassification,
+    PreTrainedModel,
     PreTrainedTokenizerBase,
 )
 
@@ -27,11 +28,19 @@ LORA_CONFIG = {"r": 16, "lora_alpha": 32, "lora_dropout": 0.1, "target_modules":
 MODEL_CLASSES = {"text": GPT2ForSequenceClassification, "token": GPT2ForTokenClassification}
 TASK_TYPES = {"text": TaskType.SEQ_CLS, "token": TaskType.TOKEN_CLS}
 ENCODERS = {"text": encode_text_classification, "token": encode_token_classification}
+HEADS = {"text": "score", "token": "classifier"}
 
 
-def build_gpt2_model(task: str, tokenizer: PreTrainedTokenizerBase, model_name: str = GPT2_MODEL, **lora_overrides) -> PeftModel:
+def build_gpt2_model(
+    task: str, tokenizer: PreTrainedTokenizerBase, model_name: str = GPT2_MODEL, mode: str = "lora", **lora_overrides
+) -> PeftModel | PreTrainedModel:
     # pad_token_id in config is needed: seq classification takes the last token that is not padding
     model = MODEL_CLASSES[task].from_pretrained(model_name, **model_kwargs(tokenizer))
+    if mode == "head":
+        # baseline: frozen gpt-2, only the classification head is trained
+        for name, param in model.named_parameters():
+            param.requires_grad = name.startswith(HEADS[task])
+        return model
     # peft adds the new classification head (score / classifier) to modules_to_save, so it is trained too
     lora = LoraConfig(task_type=TASK_TYPES[task], **{**LORA_CONFIG, **lora_overrides})
     return get_peft_model(model, lora)
