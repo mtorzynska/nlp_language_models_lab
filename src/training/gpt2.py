@@ -1,6 +1,7 @@
 # trening gpt-2 + lora, ocena na zbiorze testowym i zapis adaptera do outputs/<run-name>/ (domyslnie gpt2-{task})
 # uv run python -m src.training.gpt2 --task text
 # tryby: lora albo head (zamrozony gpt-2, trenowana tylko glowica), z --augmented train to dane z augmentacji
+# przerwany trening wznawia sie od ostatniego checkpointu, zakonczony przebieg (jest results.json) jest pomijany
 
 import argparse
 import json
@@ -10,6 +11,7 @@ from pathlib import Path
 import torch
 from datasets import Dataset, DatasetDict, concatenate_datasets
 from transformers import Trainer, TrainingArguments, set_seed
+from transformers.trainer_utils import get_last_checkpoint
 
 from src.config import GPT2_MODEL, LABEL_NAMES, PROJECT_ROOT, SEED
 from src.data import get_collator, load_processed, load_tokenizer
@@ -68,6 +70,9 @@ def save_head(model, task: str, path: Path) -> None:
 def train(args: argparse.Namespace) -> dict:
     set_seed(SEED)
     out_dir = Path(args.output_dir or OUTPUT_DIR / (args.run_name or f"gpt2-{args.task}"))
+    if (out_dir / "results.json").exists() and not args.overwrite:
+        print(f"{out_dir} ma juz results.json, pomijam (--overwrite trenuje od nowa)")
+        return json.loads((out_dir / "results.json").read_text(encoding="utf-8"))
     tokenizer = load_tokenizer(GPT2_MODEL, max_length=args.max_length)
     raw = load_subsets(args.task, args.max_train_samples, args.max_eval_samples, args.augmented, args.keep_original)
     encoded = raw.map(
@@ -88,9 +93,8 @@ def train(args: argparse.Namespace) -> dict:
         lr_scheduler_type="linear",
         eval_strategy="epoch",
         save_strategy="epoch",
+        # with load_best_model_at_end the best checkpoint is kept as well as the last one
         save_total_limit=1,
-        # no optimizer state in checkpoints, only the best model is reloaded at the end
-        save_only_model=True,
         load_best_model_at_end=True,
         metric_for_best_model="f1_macro",
         # no group_by_length: in transformers 5 it also reorders eval/predict, so predictions dont match ids
@@ -113,7 +117,18 @@ def train(args: argparse.Namespace) -> dict:
         compute_metrics=compute_metrics,
         preprocess_logits_for_metrics=logits_to_predictions,
     )
-    trainer.train()
+    # checkpoints keep optimizer and scheduler state, so an interrupted run (e.g. colab disconnect) continues
+    checkpoints = out_dir / "checkpoints"
+    last = get_last_checkpoint(str(checkpoints)) if checkpoints.is_dir() and not args.overwrite else None
+    # checkpoints from older runs (save_only_model) have no optimizer state, resuming them would restart the lr schedule
+    if last and not (Path(last) / "optimizer.pt").exists():
+        print(f"{last} nie ma stanu optymalizatora, trening od nowa")
+        last = None
+    if last:
+        print(f"wznawiam od {last}")
+    else:
+        shutil.rmtree(checkpoints, ignore_errors=True)
+    trainer.train(resume_from_checkpoint=last)
 
     # best checkpoint (by validation macro f1) is loaded
     validation = trainer.evaluate()
@@ -164,6 +179,7 @@ def main() -> None:
     parser.add_argument("--max-eval-samples", type=int, default=None)
     parser.add_argument("--run-name", type=str, default=None, help="katalog w outputs/ (domyslnie gpt2-{task})")
     parser.add_argument("--output-dir", type=str, default=None, help="pelna sciezka wynikow, np. na dysku google")
+    parser.add_argument("--overwrite", action="store_true", help="trening od nowa mimo results.json i checkpointow")
     train(parser.parse_args())
 
 
