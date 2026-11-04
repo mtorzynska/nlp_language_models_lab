@@ -14,8 +14,12 @@ IGNORE_INDEX = -100
 DECODER_MODEL_TYPES = {"gpt2"}
 
 
-def load_tokenizer(model_name: str, max_length: int = MAX_LENGTH) -> PreTrainedTokenizerBase:
-    is_decoder = AutoConfig.from_pretrained(model_name).model_type in DECODER_MODEL_TYPES
+def load_tokenizer(
+    model_name: str, max_length: int = MAX_LENGTH
+) -> PreTrainedTokenizerBase:
+    is_decoder = (
+        AutoConfig.from_pretrained(model_name).model_type in DECODER_MODEL_TYPES
+    )
     # gpt-2 bpe needs add_prefix_space for is_split_into_words
     extra = {"add_prefix_space": True} if is_decoder else {}
     tokenizer = AutoTokenizer.from_pretrained(model_name, **extra)
@@ -89,4 +93,6 @@ def get_collator(tokenizer: PreTrainedTokenizerBase, task: str):
     # dynamic padding, for token task labels are padded with -100
     if task == "text":
         return DataCollatorWithPadding(tokenizer)
-    return DataCollatorForTokenClassification(tokenizer, label_pad_token_id=IGNORE_INDEX)
+    return DataCollatorForTokenClassification(
+        tokenizer, label_pad_token_id=IGNORE_INDEX
+    )

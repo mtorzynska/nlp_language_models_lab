@@ -7,6 +7,14 @@ dependencies = [
     "datasets>=4.0",
     "transformers>=4.45",
     "numpy>=2.0",
+    "torch>=2.14.1",
+    "loguru>=0.7.3",
+    "peft>=0.21.2",
+    "evaluate>=0.4.6",
+    "scikit-learn>=1.9.1",
+    "matplotlib>=3.11.2",
+    "plotly>=5.22.0",
+    "umap-learn>=0.5.6",
 ]
 
 # kod uruchamiany z katalogu repo jako pakiet src (python -m src.data.prepare), bez instalacji
